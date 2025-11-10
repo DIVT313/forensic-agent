@@ -1,0 +1,86 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    # ← ADD THIS LINE TO DISABLE DEFAULT ANDROID SDK
+    env:
+      ANDROID_SDK_ROOT: ""
+      ANDROID_HOME: ${{ runner.temp }}/android-sdk
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      # ← FORCE UNSET ANY PRE-INSTALLED SDK
+      - name: Clean SDK Environment
+        run: |
+          echo "Cleaning SDK environment..."
+          unset ANDROID_SDK_ROOT
+          unset ANDROID_HOME
+          echo "ANDROID_HOME=${{ env.ANDROID_HOME }}" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=" >> $GITHUB_ENV
+
+      - name: Install Android cmdline-tools
+        run: |
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -L https://dl.google.com/android/repository/commandlinetools-linux-12266719_latest.zip -o cmdline-tools.zip
+          unzip -q cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          rm cmdline-tools.zip
+
+      - name: Accept Android SDK licences
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
+
+      - name: Install platform 33 + build-tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "platform-tools"
+
+      - name: Bootstrap Gradle wrapper (FIXED)
+        run: |
+          mkdir -p gradle/wrapper
+          
+          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-7.5-all.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+
+          curl -L https://github.com/gradle/gradle/raw/v7.5.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+          curl -L https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew -o gradlew
+          curl -L https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew.bat -o gradlew.bat
+          chmod +x gradlew
+
+      - name: Gradle version
+        run: ./gradlew --version
+
+      - name: Assemble Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ForensicAgent-Debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
