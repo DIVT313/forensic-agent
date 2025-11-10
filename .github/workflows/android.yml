@@ -86,7 +86,7 @@ jobs:
           }
           EOF
 
-          # AndroidManifest.xml — FIXED: android:exported="true"
+          # AndroidManifest.xml — android:exported="true"
           mkdir -p app/src/main
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -110,21 +110,39 @@ jobs:
           </manifest>
           EOF
 
-      # --- ADD OFFICIAL ICONS (ALL DENSITIES) ---
-      - name: Add ic_launcher icons (Official PNGs)
+      # --- ADD ICONS: DRAWABLES FIRST, THEN ADAPTIVE XML ---
+      - name: Add ic_launcher icons (Drawable First)
         run: |
-          mkdir -p app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi,anydpi-v26}
-          mkdir -p app/src/main/res/drawable
+          # Create directories
+          mkdir -p app/src/main/res/{drawable,mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi,anydpi-v26}}
 
-          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-mdpi/ic_launcher.png -o app/src/main/res/mipmap-mdpi/ic_launcher.png
-          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-hdpi/ic_launcher.png -o app/src/main/res/mipmap-hdpi/ic_launcher.png
-          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xhdpi/ic_launcher.png -o app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xxhdpi/ic_launcher.png -o app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xxxhdpi/ic_launcher.png -o app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          # === STEP 1: DOWNLOAD DRAWABLE XMLs FIRST ===
+          echo "Downloading drawable/ic_launcher_background.xml..."
+          curl -L -o app/src/main/res/drawable/ic_launcher_background.xml \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_background.xml
 
-          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_background.xml -o app/src/main/res/drawable/ic_launcher_background.xml
-          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_foreground.xml -o app/src/main/res/drawable/ic_launcher_foreground.xml
+          echo "Downloading drawable/ic_launcher_foreground.xml..."
+          curl -L -o app/src/main/res/drawable/ic_launcher_foreground.xml \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_foreground.xml
 
+          # Verify files exist
+          ls -la app/src/main/res/drawable/
+          [ -f app/src/main/res/drawable/ic_launcher_background.xml ] && echo "Background OK" || exit 1
+          [ -f app/src/main/res/drawable/ic_launcher_foreground.xml ] && echo "Foreground OK" || exit 1
+
+          # === STEP 2: DOWNLOAD PNG ICONS (ALL DENSITIES) ===
+          curl -L -o app/src/main/res/mipmap-mdpi/ic_launcher.png \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-mdpi/ic_launcher.png
+          curl -L -o app/src/main/res/mipmap-hdpi/ic_launcher.png \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-hdpi/ic_launcher.png
+          curl -L -o app/src/main/res/mipmap-xhdpi/ic_launcher.png \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xhdpi/ic_launcher.png
+          curl -L -o app/src/main/res/mipmap-xxhdpi/ic_launcher.png \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xxhdpi/ic_launcher.png
+          curl -L -o app/src/main/res/mipmap-xxxhdpi/ic_launcher.png \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xxxhdpi/ic_launcher.png
+
+          # === STEP 3: CREATE ADAPTIVE ICON (AFTER DRAWABLES EXIST) ===
           cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
@@ -132,6 +150,8 @@ jobs:
               <foreground android:drawable="@drawable/ic_launcher_foreground"/>
           </adaptive-icon>
           EOF
+
+          echo "All icons created successfully!"
 
       # --- BOOTSTRAP GRADLE WRAPPER ---
       - name: Bootstrap Gradle Wrapper
