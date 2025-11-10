@@ -22,8 +22,8 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # --- USE GITHUB'S PRE-INSTALLED SDK (CORRECT PATHS) ---
-      - name: Setup Android SDK (Pre-installed)
+      # --- USE GITHUB'S PRE-INSTALLED SDK ---
+      - name: Setup Android SDK
         run: |
           SDK_DIR="/usr/local/lib/android/sdk"
           echo "Using pre-installed Android SDK at $SDK_DIR"
@@ -32,12 +32,12 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK_DIR" >> $GITHUB_ENV
           echo "PATH=$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$PATH" >> $GITHUB_ENV
 
-      # --- ACCEPT LICENSES (CORRECT PATH) ---
+      # --- ACCEPT LICENSES ---
       - name: Accept Android SDK Licenses
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
-      # --- INSTALL PLATFORM & TOOLS ---
+      # --- INSTALL PLATFORM 33 + BUILD-TOOLS 33.0.2 ---
       - name: Install Android Platform & Tools
         run: |
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
@@ -45,8 +45,18 @@ jobs:
             "build-tools;33.0.2" \
             "platform-tools"
 
-      # --- FIX GRADLE WRAPPER TO STABLE 7.5 ---
-      - name: Bootstrap Gradle Wrapper (Stable 7.5)
+      # --- ENABLE ANDROIDX + FIX GRADLE ---
+      - name: Setup gradle.properties
+        run: |
+          mkdir -p app
+          cat > app/gradle.properties << 'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+          EOF
+
+      # --- BOOTSTRAP GRADLE WRAPPER ---
+      - name: Bootstrap Gradle Wrapper
         run: |
           mkdir -p gradle/wrapper
           
