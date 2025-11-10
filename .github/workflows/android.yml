@@ -58,7 +58,7 @@ jobs:
           mkdir -p app
           cat > app/build.gradle << 'EOF'
           plugins {
-              id 'com.android. application'
+              id 'com.android.application'
           }
 
           android {
@@ -108,18 +108,26 @@ jobs:
           </manifest>
           EOF
 
-      # --- ADD ICONS USING BASE64 (NO convert) ---
-      - name: Add ic_launcher icons (Base64)
+      # --- ADD OFFICIAL ICONS (NO convert, NO base64) ---
+      - name: Add ic_launcher icons (Official + ffmpeg)
         run: |
           # Create directories
           mkdir -p app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi,anydpi-v26}
           mkdir -p app/src/main/res/drawable
 
-          # Download adaptive icon XMLs
+          # Download official Android launcher (48dp mdpi)
+          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-mdpi/ic_launcher.png -o app/src/main/res/mipmap-mdpi/ic_launcher.png
+
+          # Use ffmpeg (pre-installed) to resize
+          ffmpeg -y -i app/src/main/res/mipmap-mdpi/ic_launcher.png -vf scale=72:72 app/src/main/res/mipmap-hdpi/ic_launcher.png
+          ffmpeg -y -i app/src/main/res/mipmap-mdpi/ic_launcher.png -vf scale=96:96 app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          ffmpeg -y -i app/src/main/res/mipmap-mdpi/ic_launcher.png -vf scale=144:144 app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          ffmpeg -y -i app/src/main/res/mipmap-mdpi/ic_launcher.png -vf scale=192:192 app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
+          # Adaptive icon XMLs
           curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_background.xml -o app/src/main/res/drawable/ic_launcher_background.xml
           curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_foreground.xml -o app/src/main/res/drawable/ic_launcher_foreground.xml
 
-          # Adaptive icon
           cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
@@ -127,16 +135,6 @@ jobs:
               <foreground android:drawable="@drawable/ic_launcher_foreground"/>
           </adaptive-icon>
           EOF
-
-          # === BASE64 PNG (48x48 white with rounded corners) ===
-          BASE64_PNG="iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAFzklEQVR4nO2aW2gcVRzHP7+7e3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d TEST"
-
-          # Decode Base64 to PNG (all densities)
-          echo "$BASE64_PNG" | base64 -d > app/src/main/res/mipmap-mdpi/ic_launcher.png
-          convert -resize 72x72 app/src/main/res/mipmap-mdpi/ic_launcher.png app/src/main/res/mipmap-hdpi/ic_launcher.png
-          convert -resize 96x96 app/src/main/res/mipmap-mdpi/ic_launcher.png app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          convert -resize 144x144 app/src/main/res/mipmap-mdpi/ic_launcher.png app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          convert -resize 192x192 app/src/main/res/mipmap-mdpi/ic_launcher.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
       # --- BOOTSTRAP GRADLE WRAPPER ---
       - name: Bootstrap Gradle Wrapper
