@@ -22,26 +22,25 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # --- USE GITHUB'S PRE-INSTALLED SDK ---
+      # --- USE GITHUB'S PRE-INSTALLED SDK (CORRECT PATHS) ---
       - name: Setup Android SDK (Pre-installed)
         run: |
           SDK_DIR="/usr/local/lib/android/sdk"
           echo "Using pre-installed Android SDK at $SDK_DIR"
           
-          # Force ANDROID_HOME and disable others
           echo "ANDROID_HOME=$SDK_DIR" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$SDK_DIR" >> $GITHUB_ENV
-          echo "PATH=$SDK_DIR/platform-tools:$SDK_DIR/tools:$PATH" >> $GITHUB_ENV
+          echo "PATH=$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$PATH" >> $GITHUB_ENV
 
-      # --- ACCEPT LICENSES ---
+      # --- ACCEPT LICENSES (CORRECT PATH) ---
       - name: Accept Android SDK Licenses
         run: |
-          yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
-      # --- INSTALL PLATFORM & BUILD TOOLS ---
+      # --- INSTALL PLATFORM & TOOLS ---
       - name: Install Android Platform & Tools
         run: |
-          $ANDROID_HOME/tools/bin/sdkmanager \
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platforms;android-33" \
             "build-tools;33.0.2" \
             "platform-tools"
@@ -51,7 +50,6 @@ jobs:
         run: |
           mkdir -p gradle/wrapper
           
-          # Force correct stable distribution
           cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
@@ -60,7 +58,6 @@ jobs:
           zipStorePath=wrapper/dists
           EOF
 
-          # Download stable wrapper files
           curl -L https://github.com/gradle/gradle/raw/v7.5.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
           curl -L https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew -o gradlew
           curl -L https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew.bat -o gradlew.bat
