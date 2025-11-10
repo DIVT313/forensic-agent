@@ -22,44 +22,36 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # --- FINAL FIX: Use runner.temp + full cleanup ---
-      - name: Setup Android SDK
+      # --- USE GITHUB'S PRE-INSTALLED SDK ---
+      - name: Setup Android SDK (Pre-installed)
         run: |
-          SDK_DIR="${{ runner.temp }}/android-sdk"
-          echo "Setting up Android SDK in $SDK_DIR"
+          SDK_DIR="/usr/local/lib/android/sdk"
+          echo "Using pre-installed Android SDK at $SDK_DIR"
           
-          # Clean any existing env vars
-          unset ANDROID_HOME
-          unset ANDROID_SDK_ROOT
-          unset ANDROID_NDK_HOME
-          
-          # Set only ANDROID_HOME
+          # Force ANDROID_HOME and disable others
           echo "ANDROID_HOME=$SDK_DIR" >> $GITHUB_ENV
-          echo "PATH=$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$PATH" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> $GITHUB_ENV
+          echo "PATH=$SDK_DIR/platform-tools:$SDK_DIR/tools:$PATH" >> $GITHUB_ENV
 
-      - name: Install Android cmdline-tools
+      # --- ACCEPT LICENSES ---
+      - name: Accept Android SDK Licenses
         run: |
-          mkdir -p "$ANDROID_HOME/cmdline-tools"
-          curl -L https://dl.google.com/android/repository/commandlinetools-linux-12266719_latest.zip -o cmdline-tools.zip
-          unzip -q cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
-          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
-          rm cmdline-tools.zip
+          yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses
 
-      - name: Accept Android SDK licences
+      # --- INSTALL PLATFORM & BUILD TOOLS ---
+      - name: Install Android Platform & Tools
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
-
-      - name: Install platform 33 + build-tools
-        run: |
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+          $ANDROID_HOME/tools/bin/sdkmanager \
             "platforms;android-33" \
             "build-tools;33.0.2" \
             "platform-tools"
 
-      - name: Bootstrap Gradle wrapper
+      # --- FIX GRADLE WRAPPER TO STABLE 7.5 ---
+      - name: Bootstrap Gradle Wrapper (Stable 7.5)
         run: |
           mkdir -p gradle/wrapper
           
+          # Force correct stable distribution
           cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
@@ -68,18 +60,19 @@ jobs:
           zipStorePath=wrapper/dists
           EOF
 
+          # Download stable wrapper files
           curl -L https://github.com/gradle/gradle/raw/v7.5.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
           curl -L https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew -o gradlew
           curl -L https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew.bat -o gradlew.bat
           chmod +x gradlew
 
-      - name: Gradle version
+      - name: Gradle Version
         run: ./gradlew --version
 
-      - name: Assemble Debug APK
+      - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Upload Debug APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ForensicAgent-Debug
