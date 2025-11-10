@@ -45,11 +45,10 @@ jobs:
             "build-tools;33.0.2" \
             "platform-tools"
 
-      # --- ENABLE ANDROIDX + FIX GRADLE ---
-      - name: Setup gradle.properties
+      # --- ENABLE ANDROIDX IN ROOT gradle.properties ---
+      - name: Create gradle.properties (ROOT)
         run: |
-          mkdir -p app
-          cat > app/gradle.properties << 'EOF'
+          cat > gradle.properties << 'EOF'
           android.useAndroidX=true
           android.enableJetifier=true
           org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
