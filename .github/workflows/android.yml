@@ -11,6 +11,11 @@ jobs:
     permissions:
       contents: read
 
+    # ← ADD THIS LINE TO DISABLE DEFAULT ANDROID SDK
+    env:
+      ANDROID_SDK_ROOT: ""
+      ANDROID_HOME: ${{ runner.temp }}/android-sdk
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,35 +27,33 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # --- FIX: Remove default ANDROID_SDK_ROOT ---
-      - name: Unset ANDROID_SDK_ROOT
+      # ← FORCE UNSET ANY PRE-INSTALLED SDK
+      - name: Clean SDK Environment
         run: |
+          echo "Cleaning SDK environment..."
           unset ANDROID_SDK_ROOT
-          echo "ANDROID_SDK_ROOT unset"
+          unset ANDROID_HOME
+          echo "ANDROID_HOME=${{ env.ANDROID_HOME }}" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=" >> $GITHUB_ENV
 
       - name: Install Android cmdline-tools
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
           curl -L https://dl.google.com/android/repository/commandlinetools-linux-12266719_latest.zip -o cmdline-tools.zip
-          unzip -q cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools
-          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          unzip -q cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
           rm cmdline-tools.zip
-        env:
-          ANDROID_HOME: ${{ runner.temp }}/android-sdk
 
       - name: Accept Android SDK licences
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
 
       - name: Install platform 33 + build-tools
         run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-33" \
             "build-tools;33.0.2" \
             "platform-tools"
-
-      - name: Export ANDROID_HOME
-        run: echo "ANDROID_HOME=${{ runner.temp }}/android-sdk" >> $GITHUB_ENV
 
       - name: Bootstrap Gradle wrapper (FIXED)
         run: |
