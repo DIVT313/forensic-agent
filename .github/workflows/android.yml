@@ -86,7 +86,7 @@ jobs:
           }
           EOF
 
-          # AndroidManifest.xml
+          # AndroidManifest.xml — FIXED: android:exported="true"
           mkdir -p app/src/main
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -97,7 +97,9 @@ jobs:
                   android:icon="@mipmap/ic_launcher"
                   android:label="Forensic Agent"
                   android:theme="@style/Theme.MaterialComponents.DayNight">
-                  <activity android:name=".MainActivity">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
@@ -108,25 +110,21 @@ jobs:
           </manifest>
           EOF
 
-      # --- ADD OFFICIAL ICONS (DIRECT DOWNLOAD, NO RESIZE) ---
+      # --- ADD OFFICIAL ICONS (ALL DENSITIES) ---
       - name: Add ic_launcher icons (Official PNGs)
         run: |
-          # Create directories
           mkdir -p app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi,anydpi-v26}
           mkdir -p app/src/main/res/drawable
 
-          # Download official icons (all densities)
           curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-mdpi/ic_launcher.png -o app/src/main/res/mipmap-mdpi/ic_launcher.png
           curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-hdpi/ic_launcher.png -o app/src/main/res/mipmap-hdpi/ic_launcher.png
           curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xhdpi/ic_launcher.png -o app/src/main/res/mipmap-xhdpi/ic_launcher.png
           curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xxhdpi/ic_launcher.png -o app/src/main/res/mipmap-xxhdpi/ic_launcher.png
           curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xxxhdpi/ic_launcher.png -o app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
-          # Adaptive icon XMLs
           curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_background.xml -o app/src/main/res/drawable/ic_launcher_background.xml
           curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_foreground.xml -o app/src/main/res/drawable/ic_launcher_foreground.xml
 
-          # Adaptive icon
           cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
