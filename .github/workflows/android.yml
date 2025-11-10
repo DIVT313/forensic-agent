@@ -44,8 +44,8 @@ jobs:
             "build-tools;33.0.2" \
             "platform-tools"
 
-      # --- ENABLE ANDROIDX + NAMESPACE ---
-      - name: Setup gradle.properties & build.gradle
+      # --- ENABLE ANDROIDX + NAMESPACE + CREATE DIRS ---
+      - name: Setup Project Structure
         run: |
           # Root gradle.properties
           cat > gradle.properties << 'EOF'
@@ -54,7 +54,7 @@ jobs:
           org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
           EOF
 
-          # Fix app/build.gradle
+          # app/build.gradle
           mkdir -p app
           cat > app/build.gradle << 'EOF'
           plugins {
@@ -86,48 +86,7 @@ jobs:
           }
           EOF
 
-      # --- ADD MISSING IC_LAUNCHER ICONS ---
-      - name: Add ic_launcher icons
-        run: |
-          mkdir -p app/src/main/res/mipmap-anydpi-v26
-          mkdir -p app/src/main/res/mipmap-hdpi
-          mkdir -p app/src/main/res/mipmap-mdpi
-          mkdir -p app/src/main/res/mipmap-xhdpi
-          mkdir -p app/src/main/res/mipmap-xxhdpi
-          mkdir -p app/src/main/res/mipmap-xxxhdpi
-
-          # Download default Android launcher icon
-          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_background.xml -o app/src/main/res/drawable/ic_launcher_background.xml
-          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_foreground.xml -o app/src/main/res/drawable/ic_launcher_foreground.xml
-
-          # Generate ic_launcher.xml for anydpi
-          cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-              <background android:drawable="@drawable/ic_launcher_background"/>
-              <foreground android:drawable="@drawable/ic_launcher_foreground"/>
-          </adaptive-icon>
-          EOF
-
-          # Create simple PNGs for all densities (48dp base)
-          convert -size 48x48 xc:white app/src/main/res/mipmap-mdpi/ic_launcher.png
-          convert -size 72x72 xc:white app/src/main/res/mipmap-hdpi/ic_launcher.png
-          convert -size 96x96 xc:white app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          convert -size 144x144 xc:white app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          convert -size 192x192 xc:white app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-
-          # Round corners (optional)
-          for size in 48 72 96 144 192; do
-            convert -size ${size}x${size} xc:white \
-              \( +clone -alpha extract -draw 'fill black polygon 0,0 0,${size} ${size},0' \
-              -compose CopyOpacity -composite -negate \) \
-              -alpha off -compose CopyOpacity -composite \
-              app/src/main/res/mipmap-mdpi/ic_launcher.png
-          done
-
-      # --- FIX AndroidManifest.xml (REMOVE package) ---
-      - name: Fix AndroidManifest.xml
-        run: |
+          # AndroidManifest.xml
           mkdir -p app/src/main
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -148,6 +107,38 @@ jobs:
 
           </manifest>
           EOF
+
+      # --- ADD IC_LAUNCHER ICONS (FIXED DIRS) ---
+      - name: Add ic_launcher icons (FIXED)
+        run: |
+          # Create all directories FIRST
+          mkdir -p app/src/main/res/mipmap-anydpi-v26
+          mkdir -p app/src/main/res/mipmap-hdpi
+          mkdir -p app/src/main/res/mipmap-mdpi
+          mkdir -p app/src/main/res/mipmap-xhdpi
+          mkdir -p app/src/main/res/mipmap-xxhdpi
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
+          mkdir -p app/src/main/res/drawable
+
+          # Download background & foreground
+          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_background.xml -o app/src/main/res/drawable/ic_launcher_background.xml
+          curl -L https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/drawable/ic_launcher_foreground.xml -o app/src/main/res/drawable/ic_launcher_foreground.xml
+
+          # Create adaptive icon
+          cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@drawable/ic_launcher_background"/>
+              <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+          </adaptive-icon>
+          EOF
+
+          # Generate simple white PNG icons (all densities)
+          convert -size 48x48 xc:white app/src/main/res/mipmap-mdpi/ic_launcher.png
+          convert -size 72x72 xc:white app/src/main/res/mipmap-hdpi/ic_launcher.png
+          convert -size 96x96 xc:white app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          convert -size 144x144 xc:white app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          convert -size 192x192 xc:white app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
       # --- BOOTSTRAP GRADLE WRAPPER ---
       - name: Bootstrap Gradle Wrapper
