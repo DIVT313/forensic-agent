@@ -11,7 +11,6 @@ jobs:
     permissions:
       contents: read
 
-    # ← ADD THIS LINE TO DISABLE DEFAULT ANDROID SDK
     env:
       ANDROID_SDK_ROOT: ""
       ANDROID_HOME: ${{ runner.temp }}/android-sdk
@@ -27,7 +26,6 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # ← FORCE UNSET ANY PRE-INSTALLED SDK
       - name: Clean SDK Environment
         run: |
           echo "Cleaning SDK environment..."
