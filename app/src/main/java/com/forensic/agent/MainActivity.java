@@ -11,6 +11,11 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.widget.Toast;
 import android.os.Build;
+import android.net.Uri;
+import android.provider.Settings;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
     
@@ -51,47 +56,33 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private boolean checkPermissions() {
-        String[] permissions;
-        
-        // Android 14+ (API 34) requires notification permission
+        // Only essential permissions are required to proceed
+        String[] essential;
         if (Build.VERSION.SDK_INT >= 34) {
-            permissions = new String[]{
+            essential = new String[]{
                 Manifest.permission.READ_CONTACTS,
                 Manifest.permission.READ_SMS,
                 Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CALENDAR,
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO,
-                Manifest.permission.POST_NOTIFICATIONS
+                Manifest.permission.READ_CALENDAR
             };
-        }
-        // Android 13 (API 33) requires different permissions
-        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions = new String[]{
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            essential = new String[]{
                 Manifest.permission.READ_CONTACTS,
                 Manifest.permission.READ_SMS,
                 Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CALENDAR,
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO,
-                Manifest.permission.POST_NOTIFICATIONS
+                Manifest.permission.READ_CALENDAR
             };
         } else {
-            permissions = new String[]{
+            essential = new String[]{
                 Manifest.permission.READ_CONTACTS,
                 Manifest.permission.READ_SMS,
                 Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CALENDAR,
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
+                Manifest.permission.READ_CALENDAR
             };
         }
         
-        for (String permission : permissions) {
-            if (ContextCompat.checkSelfPermission(this, permission) 
-                != PackageManager.PERMISSION_GRANTED) {
+        for (String permission : essential) {
+            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
                 return false;
             }
         }
@@ -99,47 +90,42 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private void requestPermissions() {
-        String[] permissions;
-        
-        // Android 14+ (API 34) requires notification permission
+        // Essential + optional permissions
+        String[] essential = new String[]{
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.READ_SMS,
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.READ_CALENDAR
+        };
+        String[] optional;
         if (Build.VERSION.SDK_INT >= 34) {
-            permissions = new String[]{
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.READ_SMS,
-                Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CALENDAR,
+            optional = new String[]{
                 Manifest.permission.READ_MEDIA_IMAGES,
                 Manifest.permission.READ_MEDIA_VIDEO,
                 Manifest.permission.READ_MEDIA_AUDIO,
                 Manifest.permission.POST_NOTIFICATIONS
             };
-        }
-        // Android 13 (API 33) requires different permissions
-        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions = new String[]{
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.READ_SMS,
-                Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CALENDAR,
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            optional = new String[]{
                 Manifest.permission.READ_MEDIA_IMAGES,
                 Manifest.permission.READ_MEDIA_VIDEO,
                 Manifest.permission.READ_MEDIA_AUDIO,
                 Manifest.permission.POST_NOTIFICATIONS
             };
         } else {
-            permissions = new String[]{
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.READ_SMS,
-                Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CALENDAR,
+            optional = new String[]{
                 Manifest.permission.READ_EXTERNAL_STORAGE,
                 Manifest.permission.WRITE_EXTERNAL_STORAGE
             };
         }
         
+        // Combine lists
+        String[] all = new String[essential.length + optional.length];
+        System.arraycopy(essential, 0, all, 0, essential.length);
+        System.arraycopy(optional, 0, all, essential.length, optional.length);
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Request all permissions at once
-            ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
+            ActivityCompat.requestPermissions(this, all, PERMISSION_REQUEST_CODE);
         }
     }
     
@@ -148,23 +134,52 @@ public class MainActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            boolean allGranted = true;
-            int grantedCount = 0;
+            // Define essential set
+            Set<String> essential = new HashSet<>(Arrays.asList(
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.READ_SMS,
+                Manifest.permission.READ_CALL_LOG,
+                Manifest.permission.READ_CALENDAR
+            ));
             
-            for (int result : grantResults) {
-                if (result == PackageManager.PERMISSION_GRANTED) {
-                    grantedCount++;
+            int essentialTotal = 0, essentialGranted = 0;
+            int optionalTotal = 0, optionalGranted = 0;
+            boolean anyPermanentlyDenied = false;
+            
+            for (int i = 0; i < permissions.length; i++) {
+                boolean granted = grantResults[i] == PackageManager.PERMISSION_GRANTED;
+                boolean isEssential = essential.contains(permissions[i]);
+                if (isEssential) {
+                    essentialTotal++;
+                    if (granted) essentialGranted++;
+                    // Permanently denied check (user selected "Don't ask again")
+                    if (!granted && !ActivityCompat.shouldShowRequestPermissionRationale(this, permissions[i])) {
+                        anyPermanentlyDenied = true;
+                    }
                 } else {
-                    allGranted = false;
+                    optionalTotal++;
+                    if (granted) optionalGranted++;
                 }
             }
             
-            if (allGranted) {
-                Toast.makeText(this, "All permissions granted! Ready to extract data", Toast.LENGTH_LONG).show();
-                statusText.setText("Ready to extract!\nClick EXTRACT DATA button\n\nAll permissions granted (" + grantedCount + "/" + permissions.length + ")");
+            if (essentialGranted == essentialTotal) {
+                Toast.makeText(this, "Essential permissions granted! Ready to extract", Toast.LENGTH_LONG).show();
+                statusText.setText("Ready to extract!\nClick EXTRACT DATA button\n\nEssential: " + essentialGranted + "/" + essentialTotal +
+                        "\nOptional: " + optionalGranted + "/" + optionalTotal);
             } else {
-                Toast.makeText(this, "Warning: " + grantedCount + "/" + permissions.length + " permissions granted\nExtraction may be incomplete", Toast.LENGTH_LONG).show();
-                statusText.setText("Warning: Partial permissions\n" + grantedCount + "/" + permissions.length + " granted\n\nExtraction may be incomplete\nClick Extract to try anyway");
+                String msg = "Essential: " + essentialGranted + "/" + essentialTotal +
+                             "\nOptional: " + optionalGranted + "/" + optionalTotal +
+                             "\n\nExtraction may be incomplete";
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+                statusText.setText("Warning: Missing essential permissions\n" + msg +
+                        (anyPermanentlyDenied ? "\n\nSome permissions permanently denied. Open Settings to enable." : ""));
+                
+                if (anyPermanentlyDenied) {
+                    // Open app settings so user can enable manually
+                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                }
             }
         }
     }
