@@ -219,9 +219,11 @@ public class MainActivity extends AppCompatActivity {
         }
         // All files access (Android 11+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            Toast.makeText(this, "Please enable All Files Access in Settings", Toast.LENGTH_LONG).show();
             Intent i = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
             i.setData(Uri.parse("package:" + getPackageName()));
             startActivity(i);
+            return;
         }
         if (!checkPermissions()) {
             Toast.makeText(this, "Please grant all permissions first", Toast.LENGTH_SHORT).show();
