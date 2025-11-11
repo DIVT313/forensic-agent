@@ -10,18 +10,17 @@ import android.content.Intent;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.widget.Toast;
-import android.os.Environment;
+import android.os.Build;
 import android.net.Uri;
 import android.provider.Settings;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
-import android.os.PowerManager;
-import android.app.AlarmManager;
-import android.app.NotificationManager;
+import android.util.Log;
 
 public class MainActivity extends AppCompatActivity {
     
+    private static final String TAG = "ForensicAgent";
     private static final int PERMISSION_REQUEST_CODE = 100;
     private TextView statusText;
     private Button extractButton;
@@ -29,6 +28,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.d(TAG, "onCreate() called");
         setContentView(R.layout.activity_main);
         
         statusText = findViewById(R.id.statusText);
@@ -37,10 +37,13 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText("Forensic Agent Ready\nVersion 1.0\n\nTap EXTRACT DATA to start");
         
         extractButton.setOnClickListener(v -> {
+            Log.d(TAG, "Extract button clicked");
             // ALWAYS check and request permissions when button clicked
             if (checkPermissions()) {
+                Log.d(TAG, "Permissions OK, starting extraction");
                 startExtraction();
             } else {
+                Log.d(TAG, "Permissions missing, requesting...");
                 // Force permission request on button click
                 Toast.makeText(this, "Requesting permissions...", Toast.LENGTH_SHORT).show();
                 requestPermissions();
@@ -57,150 +60,114 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        Log.d(TAG, "onResume() called");
         // After returning from Settings, re-check essential permissions
         if (!checkPermissions()) {
             statusText.setText("Permissions missing. Tap EXTRACT DATA to grant or enable in Settings.");
+        } else {
+            statusText.setText("All permissions granted!\nTap EXTRACT DATA to start extraction");
         }
     }
 
     private boolean checkPermissions() {
+        Log.d(TAG, "checkPermissions() called");
         // Only essential permissions are required to proceed
-        String[] essential;
-        if (Build.VERSION.SDK_INT >= 34) {
-            essential = new String[]{
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.READ_SMS,
-                Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CALENDAR
-            };
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            essential = new String[]{
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.READ_SMS,
-                Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CALENDAR
-            };
-        } else {
-            essential = new String[]{
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.READ_SMS,
-                Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CALENDAR
-            };
-        }
-        
-        for (String permission : essential) {
-            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                return false;
-            }
-        }
-        return true;
-    }
-    
-    private void requestPermissions() {
-        // Essential + optional permissions
         String[] essential = new String[]{
             Manifest.permission.READ_CONTACTS,
             Manifest.permission.READ_SMS,
             Manifest.permission.READ_CALL_LOG,
             Manifest.permission.READ_CALENDAR
         };
-        String[] optional;
-        if (Build.VERSION.SDK_INT >= 34) {
-            optional = new String[]{
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO,
-                Manifest.permission.POST_NOTIFICATIONS
-            };
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            optional = new String[]{
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO,
-                Manifest.permission.POST_NOTIFICATIONS
-            };
-        } else {
-            optional = new String[]{
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            };
+        
+        boolean allGranted = true;
+        for (String permission : essential) {
+            int result = ContextCompat.checkSelfPermission(this, permission);
+            Log.d(TAG, "Permission " + permission + ": " + (result == PackageManager.PERMISSION_GRANTED ? "GRANTED" : "DENIED"));
+            if (result != PackageManager.PERMISSION_GRANTED) {
+                allGranted = false;
+            }
         }
         
-        // Combine lists
-        String[] all = new String[essential.length + optional.length];
-        System.arraycopy(essential, 0, all, 0, essential.length);
-        System.arraycopy(optional, 0, all, essential.length, optional.length);
+        Log.d(TAG, "checkPermissions() result: " + allGranted);
+        return allGranted;
+    }
+    
+    private void requestPermissions() {
+        Log.d(TAG, "requestPermissions() called");
+        // Essential permissions only
+        String[] permissions = new String[]{
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.READ_SMS,
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.READ_CALENDAR
+        };
         
+        Log.d(TAG, "Requesting " + permissions.length + " permissions");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            ActivityCompat.requestPermissions(this, all, PERMISSION_REQUEST_CODE);
+            ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
         }
     }
     
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        Log.d(TAG, "onRequestPermissionsResult() called with requestCode: " + requestCode);
         
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            // Define essential set
-            Set<String> essential = new HashSet<>(Arrays.asList(
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.READ_SMS,
-                Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.READ_CALENDAR
-            ));
-            
-            int essentialTotal = 0, essentialGranted = 0;
-            int optionalTotal = 0, optionalGranted = 0;
-            boolean anyPermanentlyDenied = false;
-            
+            int grantedCount = 0;
             for (int i = 0; i < permissions.length; i++) {
                 boolean granted = grantResults[i] == PackageManager.PERMISSION_GRANTED;
-                boolean isEssential = essential.contains(permissions[i]);
-                if (isEssential) {
-                    essentialTotal++;
-                    if (granted) essentialGranted++;
-                    // Permanently denied check (user selected "Don't ask again")
-                    if (!granted && !ActivityCompat.shouldShowRequestPermissionRationale(this, permissions[i])) {
-                        anyPermanentlyDenied = true;
-                    }
-                } else {
-                    optionalTotal++;
-                    if (granted) optionalGranted++;
+                Log.d(TAG, "Permission " + permissions[i] + ": " + (granted ? "GRANTED" : "DENIED"));
+                if (granted) {
+                    grantedCount++;
                 }
             }
             
-            if (essentialGranted == essentialTotal) {
-                Toast.makeText(this, "Essential permissions granted! Ready to extract", Toast.LENGTH_LONG).show();
-                statusText.setText("Ready to extract!\nClick EXTRACT DATA button\n\nEssential: " + essentialGranted + "/" + essentialTotal +
-                        "\nOptional: " + optionalGranted + "/" + optionalTotal);
-                // Prompt user to enable special authorizations (battery optimization, overlays, notifications, alarms)
-                ensureSpecialAuthorizations();
+            String msg = "Permissions: " + grantedCount + "/" + permissions.length + " granted";
+            Log.d(TAG, msg);
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+            
+            if (grantedCount == permissions.length) {
+                statusText.setText("All permissions granted!\nTap EXTRACT DATA to start extraction");
             } else {
-                String msg = "Essential: " + essentialGranted + "/" + essentialTotal +
-                             "\nOptional: " + optionalGranted + "/" + optionalTotal +
-                             "\n\nExtraction may be incomplete";
-                Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
-                statusText.setText("Warning: Missing essential permissions\n" + msg +
-                        (anyPermanentlyDenied ? "\n\nSome permissions permanently denied. Open Settings to enable." : ""));
+                statusText.setText("Warning: " + grantedCount + "/" + permissions.length + " permissions granted\n\nExtraction may be incomplete");
+                
+                // If some permissions were permanently denied, show a message
+                boolean anyPermanentlyDenied = false;
+                String[] essential = new String[]{
+                    Manifest.permission.READ_CONTACTS,
+                    Manifest.permission.READ_SMS,
+                    Manifest.permission.READ_CALL_LOG,
+                    Manifest.permission.READ_CALENDAR
+                };
+                
+                for (int i = 0; i < permissions.length; i++) {
+                    if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
+                        if (!ActivityCompat.shouldShowRequestPermissionRationale(this, permissions[i])) {
+                            anyPermanentlyDenied = true;
+                            break;
+                        }
+                    }
+                }
                 
                 if (anyPermanentlyDenied) {
-                    // Open app settings so user can enable manually
-                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                    intent.setData(Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
+                    statusText.append("\n\nSome permissions permanently denied. Please enable them in Settings.");
+                    Toast.makeText(this, "Some permissions permanently denied. Please enable them in Settings.", Toast.LENGTH_LONG).show();
                 }
             }
         }
     }
     
     private void startExtraction() {
+        Log.d(TAG, "startExtraction() called");
         if (!checkPermissions()) {
+            Log.e(TAG, "Permissions not granted");
             Toast.makeText(this, "Please grant all permissions first", Toast.LENGTH_SHORT).show();
             requestPermissions();
             return;
         }
         
+        Log.d(TAG, "Starting extraction service");
         Toast.makeText(this, "Starting data extraction...", Toast.LENGTH_SHORT).show();
         
         Intent serviceIntent = new Intent(this, ExtractionService.class);
@@ -211,7 +178,7 @@ public class MainActivity extends AppCompatActivity {
         }
         
         String appDataPath = "/sdcard/Android/data/" + getPackageName() + "/files/extracted/";
-        statusText.setText("Extraction in progress...\n\nData saving to:\n" + appDataPath + "\n\nAccessible via Content Provider");
+        statusText.setText("Extraction in progress...\n\nData saving to:\n" + appDataPath + "\n\nAccessible via Content Provider\n\nCheck logcat for details");
         extractButton.setEnabled(false);
         extractButton.setText("EXTRACTING...");
         
@@ -219,8 +186,8 @@ public class MainActivity extends AppCompatActivity {
         extractButton.postDelayed(() -> {
             extractButton.setEnabled(true);
             extractButton.setText("EXTRACT DATA");
-            statusText.setText("Extraction complete!\n\nQuery via Content Provider:\nadb shell content query --uri content://com.forensic.agent.provider/contacts\n\nOr list files:\nadb shell content query --uri content://com.forensic.agent.provider/list");
-            Toast.makeText(this, "Extraction complete! Use Content Provider to access data", Toast.LENGTH_LONG).show();
+            statusText.setText("Extraction complete!\n\nCheck logcat for errors\n\nQuery via:\nadb shell content query --uri content://com.forensic.agent.provider/list");
+            Toast.makeText(this, "Extraction complete! Check logcat for details", Toast.LENGTH_LONG).show();
         }, 45000);
     }
 }

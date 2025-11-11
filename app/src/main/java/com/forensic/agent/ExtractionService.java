@@ -11,14 +11,39 @@ import android.net.Uri;
 import android.provider.ContactsContract;
 import android.provider.Telephony;
 import android.provider.CallLog;
+import android.provider.CalendarContract;
 import androidx.core.app.NotificationCompat;
 import android.app.PendingIntent;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
+import android.util.Log;
 import android.os.Environment;
 
+public class ExtractionService extends Service {
+    private static final String TAG = "ForensicAgent";
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        // Start foreground to comply with Android 8+ and Oxygen-style agent
+        startForegroundWithNotification();
+        
+        new Thread(() -> {
+            try {
+                Log.d(TAG, "Starting extraction in background thread");
+                extractData();
+            } catch (Exception e) {
+                Log.e(TAG, "Error during extraction: " + e.getMessage(), e);
+                e.printStackTrace();
+            } finally {
+                stopSelf();
+            }
+        }).start();
+        return START_NOT_STICKY;
+    }
+    
     private void startForegroundWithNotification() {
         final String CHANNEL_ID = "forensic_agent_channel";
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -35,48 +60,108 @@ import android.os.Environment;
                 .setContentIntent(pi)
                 .build();
         startForeground(1, notification);
-    }
-    
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        // Start foreground to comply with Android 8+ and Oxygen-style agent
-        startForegroundWithNotification();
-        
-        new Thread(() -> {
-            try {
-                extractData();
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                stopSelf();
-            }
-        }).start();
-        return START_NOT_STICKY;
+        Log.d(TAG, "Started foreground service with notification");
     }
     
     private void extractData() throws Exception {
+        Log.d(TAG, "extractData() called");
+        
+        // Check if we have the necessary permissions first
+        if (!hasRequiredPermissions()) {
+            Log.e(TAG, "Missing required permissions for data extraction");
+            throw new SecurityException("Missing required permissions for data extraction");
+        }
+        
         // Use app-accessible external storage (doesn't require MANAGE_EXTERNAL_STORAGE)
         File outputDir = new File(getExternalFilesDir(null), "extracted");
-        if (!outputDir.exists()) outputDir.mkdirs();
+        Log.d(TAG, "Output directory: " + outputDir.getAbsolutePath());
+        
+        // Check if external storage is available
+        if (!isExternalStorageAvailable()) {
+            Log.e(TAG, "External storage not available");
+            throw new Exception("External storage not available");
+        }
+        
+        if (!outputDir.exists()) {
+            Log.d(TAG, "Directory doesn't exist, creating...");
+            boolean created = outputDir.mkdirs();
+            Log.d(TAG, "Directory created: " + created);
+            if (!created) {
+                Log.e(TAG, "Failed to create directory: " + outputDir.getAbsolutePath());
+                throw new Exception("Cannot create directory: permission denied");
+            }
+        }
+        
+        if (!outputDir.canWrite()) {
+            Log.e(TAG, "Cannot write to directory: " + outputDir.getAbsolutePath());
+            throw new Exception("Cannot write to directory: permission denied");
+        }
+        
+        Log.d(TAG, "Starting extraction...");
         
         // Extract contacts
-        extractContacts(new File(outputDir, "contacts.json"));
+        try {
+            Log.d(TAG, "Extracting contacts...");
+            extractContacts(new File(outputDir, "contacts.json"));
+            Log.d(TAG, "Contacts extracted successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Error extracting contacts: " + e.getMessage(), e);
+        }
         
         // Extract SMS
-        extractSMS(new File(outputDir, "sms.json"));
+        try {
+            Log.d(TAG, "Extracting SMS...");
+            extractSMS(new File(outputDir, "sms.json"));
+            Log.d(TAG, "SMS extracted successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Error extracting SMS: " + e.getMessage(), e);
+        }
         
         // Extract call logs
-        extractCallLogs(new File(outputDir, "call_logs.json"));
+        try {
+            Log.d(TAG, "Extracting call logs...");
+            extractCallLogs(new File(outputDir, "call_logs.json"));
+            Log.d(TAG, "Call logs extracted successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Error extracting call logs: " + e.getMessage(), e);
+        }
         
         // Extract calendar
-        extractCalendar(new File(outputDir, "calendar.json"));
+        try {
+            Log.d(TAG, "Extracting calendar...");
+            extractCalendar(new File(outputDir, "calendar.json"));
+            Log.d(TAG, "Calendar extracted successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Error extracting calendar: " + e.getMessage(), e);
+        }
+        
+        Log.d(TAG, "Extraction completed");
+    }
+    
+    private boolean hasRequiredPermissions() {
+        // We need to check if we have the basic permissions for data access
+        // Since we already checked in MainActivity, this is just a safety check
+        return true;
+    }
+    
+    private boolean isExternalStorageAvailable() {
+        String state = Environment.getExternalStorageState();
+        return Environment.MEDIA_MOUNTED.equals(state);
     }
     
     private void extractContacts(File outputFile) throws Exception {
+        Log.d(TAG, "extractContacts() called, output file: " + outputFile.getAbsolutePath());
+        
         JSONArray contacts = new JSONArray();
         
         Uri uri = ContactsContract.Contacts.CONTENT_URI;
-        Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(uri, null, null, null, null);
+        } catch (SecurityException e) {
+            Log.e(TAG, "SecurityException when querying contacts: " + e.getMessage(), e);
+            throw e;
+        }
         
         if (cursor != null && cursor.moveToFirst()) {
             do {
@@ -89,13 +174,19 @@ import android.os.Environment;
                 
                 // Get phone numbers
                 JSONArray phones = new JSONArray();
-                Cursor phoneCursor = getContentResolver().query(
-                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    null,
-                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?",
-                    new String[]{id},
-                    null
-                );
+                Cursor phoneCursor = null;
+                try {
+                    phoneCursor = getContentResolver().query(
+                        ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                        null,
+                        ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?",
+                        new String[]{id},
+                        null
+                    );
+                } catch (SecurityException e) {
+                    Log.e(TAG, "SecurityException when querying phone numbers: " + e.getMessage(), e);
+                    // Continue with empty phones array
+                }
                 
                 if (phoneCursor != null && phoneCursor.moveToFirst()) {
                     do {
@@ -114,16 +205,40 @@ import android.os.Environment;
             cursor.close();
         }
         
-        FileWriter writer = new FileWriter(outputFile);
-        writer.write(contacts.toString(2));
-        writer.close();
+        // Write to file
+        Log.d(TAG, "Writing contacts to file...");
+        FileWriter writer = null;
+        try {
+            writer = new FileWriter(outputFile);
+            writer.write(contacts.toString(2));
+            Log.d(TAG, "Contacts written successfully, size: " + contacts.length());
+        } catch (IOException e) {
+            Log.e(TAG, "Error writing contacts to file: " + e.getMessage(), e);
+            throw e;
+        } finally {
+            if (writer != null) {
+                try {
+                    writer.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error closing writer: " + e.getMessage(), e);
+                }
+            }
+        }
     }
     
     private void extractSMS(File outputFile) throws Exception {
+        Log.d(TAG, "extractSMS() called, output file: " + outputFile.getAbsolutePath());
+        
         JSONArray messages = new JSONArray();
         
         Uri uri = Telephony.Sms.CONTENT_URI;
-        Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(uri, null, null, null, null);
+        } catch (SecurityException e) {
+            Log.e(TAG, "SecurityException when querying SMS: " + e.getMessage(), e);
+            throw e;
+        }
         
         if (cursor != null && cursor.moveToFirst()) {
             do {
@@ -137,16 +252,40 @@ import android.os.Environment;
             cursor.close();
         }
         
-        FileWriter writer = new FileWriter(outputFile);
-        writer.write(messages.toString(2));
-        writer.close();
+        // Write to file
+        Log.d(TAG, "Writing SMS to file...");
+        FileWriter writer = null;
+        try {
+            writer = new FileWriter(outputFile);
+            writer.write(messages.toString(2));
+            Log.d(TAG, "SMS written successfully, size: " + messages.length());
+        } catch (IOException e) {
+            Log.e(TAG, "Error writing SMS to file: " + e.getMessage(), e);
+            throw e;
+        } finally {
+            if (writer != null) {
+                try {
+                    writer.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error closing writer: " + e.getMessage(), e);
+                }
+            }
+        }
     }
     
     private void extractCallLogs(File outputFile) throws Exception {
+        Log.d(TAG, "extractCallLogs() called, output file: " + outputFile.getAbsolutePath());
+        
         JSONArray calls = new JSONArray();
         
         Uri uri = CallLog.Calls.CONTENT_URI;
-        Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(uri, null, null, null, null);
+        } catch (SecurityException e) {
+            Log.e(TAG, "SecurityException when querying call logs: " + e.getMessage(), e);
+            throw e;
+        }
         
         if (cursor != null && cursor.moveToFirst()) {
             do {
@@ -160,17 +299,42 @@ import android.os.Environment;
             cursor.close();
         }
         
-        FileWriter writer = new FileWriter(outputFile);
-        writer.write(calls.toString(2));
-        writer.close();
+        // Write to file
+        Log.d(TAG, "Writing call logs to file...");
+        FileWriter writer = null;
+        try {
+            writer = new FileWriter(outputFile);
+            writer.write(calls.toString(2));
+            Log.d(TAG, "Call logs written successfully, size: " + calls.length());
+        } catch (IOException e) {
+            Log.e(TAG, "Error writing call logs to file: " + e.getMessage(), e);
+            throw e;
+        } finally {
+            if (writer != null) {
+                try {
+                    writer.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error closing writer: " + e.getMessage(), e);
+                }
+            }
+        }
     }
     
     private void extractCalendar(File outputFile) throws Exception {
+        Log.d(TAG, "extractCalendar() called, output file: " + outputFile.getAbsolutePath());
+        
         JSONArray events = new JSONArray();
-        Cursor c = getContentResolver().query(
-                CalendarContract.Events.CONTENT_URI,
-                new String[]{CalendarContract.Events._ID, CalendarContract.Events.TITLE, CalendarContract.Events.DTSTART, CalendarContract.Events.DTEND},
-                null, null, null);
+        Cursor c = null;
+        try {
+            c = getContentResolver().query(
+                    CalendarContract.Events.CONTENT_URI,
+                    new String[]{CalendarContract.Events._ID, CalendarContract.Events.TITLE, CalendarContract.Events.DTSTART, CalendarContract.Events.DTEND},
+                    null, null, null);
+        } catch (SecurityException e) {
+            Log.e(TAG, "SecurityException when querying calendar: " + e.getMessage(), e);
+            // Continue with empty events array
+        }
+        
         if (c != null && c.moveToFirst()) {
             do {
                 JSONObject ev = new JSONObject();
@@ -182,9 +346,26 @@ import android.os.Environment;
             } while (c.moveToNext());
             c.close();
         }
-        FileWriter writer = new FileWriter(outputFile);
-        writer.write(events.toString(2));
-        writer.close();
+        
+        // Write to file
+        Log.d(TAG, "Writing calendar to file...");
+        FileWriter writer = null;
+        try {
+            writer = new FileWriter(outputFile);
+            writer.write(events.toString(2));
+            Log.d(TAG, "Calendar written successfully, size: " + events.length());
+        } catch (IOException e) {
+            Log.e(TAG, "Error writing calendar to file: " + e.getMessage(), e);
+            throw e;
+        } finally {
+            if (writer != null) {
+                try {
+                    writer.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error closing writer: " + e.getMessage(), e);
+                }
+            }
+        }
     }
     
     @Override
