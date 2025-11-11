@@ -44,8 +44,8 @@ jobs:
             "build-tools;33.0.2" \
             "platform-tools"
 
-      # --- PROJECT STRUCTURE + FULL JAVA FILES ---
-      - name: Setup Project & Java Files
+      # --- PROJECT + FIXED DEPENDENCIES ---
+      - name: Setup Project
         run: |
           # gradle.properties
           cat > gradle.properties << 'EOF'
@@ -54,7 +54,7 @@ jobs:
           org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
           EOF
 
-          # app/build.gradle
+          # app/build.gradle — FIXED KOTLIN CONFLICT
           mkdir -p app
           cat > app/build.gradle << 'EOF'
           plugins {
@@ -83,7 +83,20 @@ jobs:
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
               implementation 'com.google.android.material:material:1.9.0'
-              implementation 'androidx.core:core:1.10.1'
+              
+              // FIXED: Force Kotlin 1.8.10
+              implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.8.10'
+              
+              // Remove androidx.core:core (caused conflict)
+          }
+
+          // Force Kotlin version
+          configurations.all {
+              resolutionStrategy {
+                  force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.10'
+                  force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.10'
+                  force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.10'
+              }
           }
           EOF
 
@@ -119,7 +132,7 @@ jobs:
           </manifest>
           EOF
 
-          # === FULL MainActivity.java ===
+          # MainActivity.java (unchanged)
           mkdir -p app/src/main/java/com/forensic/agent
           cat > app/src/main/java/com/forensic/agent/MainActivity.java << 'EOF'
           package com.forensic.agent;
@@ -219,7 +232,7 @@ jobs:
           }
           EOF
 
-          # === FULL ExtractionService.java ===
+          # ExtractionService.java (unchanged)
           cat > app/src/main/java/com/forensic/agent/ExtractionService.java << 'EOF'
           package com.forensic.agent;
 
@@ -403,7 +416,7 @@ jobs:
           }
           EOF
 
-          # === layout/activity_main.xml ===
+          # layout/activity_main.xml
           mkdir -p app/src/main/res/layout
           cat > app/src/main/res/layout/activity_main.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
@@ -439,7 +452,7 @@ jobs:
           </LinearLayout>
           EOF
 
-      # --- ADD CLASSIC ICONS ---
+      # --- ICONS ---
       - name: Add Icons
         run: |
           mkdir -p app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
@@ -454,7 +467,7 @@ jobs:
           curl -L -o app/src/main/res/mipmap-xxxhdpi/ic_launcher.png \
             https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xxxhdpi/ic_launcher.png
 
-      # --- BOOTSTRAP GRADLE ---
+      # --- GRADLE WRAPPER ---
       - name: Bootstrap Gradle
         run: |
           mkdir -p gradle/wrapper
