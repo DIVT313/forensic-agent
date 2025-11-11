@@ -21,12 +21,14 @@ import java.io.FileWriter;
 import java.io.IOException;
 import android.util.Log;
 import android.os.Environment;
+import android.content.Context;
 
 public class ExtractionService extends Service {
     private static final String TAG = "ForensicAgent";
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "onStartCommand() called");
         // Start foreground to comply with Android 8+ and Oxygen-style agent
         startForegroundWithNotification();
         
@@ -38,6 +40,7 @@ public class ExtractionService extends Service {
                 Log.e(TAG, "Error during extraction: " + e.getMessage(), e);
                 e.printStackTrace();
             } finally {
+                Log.d(TAG, "Stopping service");
                 stopSelf();
             }
         }).start();
@@ -45,8 +48,9 @@ public class ExtractionService extends Service {
     }
     
     private void startForegroundWithNotification() {
+        Log.d(TAG, "startForegroundWithNotification() called");
         final String CHANNEL_ID = "forensic_agent_channel";
-        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Forensic Agent", NotificationManager.IMPORTANCE_LOW);
             nm.createNotificationChannel(channel);
@@ -82,6 +86,9 @@ public class ExtractionService extends Service {
             throw new Exception("External storage not available");
         }
         
+        Log.d(TAG, "External storage state: " + Environment.getExternalStorageState());
+        Log.d(TAG, "getExternalFilesDir(null): " + getExternalFilesDir(null));
+        
         if (!outputDir.exists()) {
             Log.d(TAG, "Directory doesn't exist, creating...");
             boolean created = outputDir.mkdirs();
@@ -94,6 +101,13 @@ public class ExtractionService extends Service {
         
         if (!outputDir.canWrite()) {
             Log.e(TAG, "Cannot write to directory: " + outputDir.getAbsolutePath());
+            Log.e(TAG, "Directory exists: " + outputDir.exists());
+            Log.e(TAG, "Directory can read: " + outputDir.canRead());
+            Log.e(TAG, "Parent directory: " + outputDir.getParent());
+            File parent = outputDir.getParentFile();
+            if (parent != null) {
+                Log.e(TAG, "Parent can write: " + parent.canWrite());
+            }
             throw new Exception("Cannot write to directory: permission denied");
         }
         
@@ -139,6 +153,7 @@ public class ExtractionService extends Service {
     }
     
     private boolean hasRequiredPermissions() {
+        Log.d(TAG, "hasRequiredPermissions() called");
         // We need to check if we have the basic permissions for data access
         // Since we already checked in MainActivity, this is just a safety check
         return true;
@@ -146,6 +161,7 @@ public class ExtractionService extends Service {
     
     private boolean isExternalStorageAvailable() {
         String state = Environment.getExternalStorageState();
+        Log.d(TAG, "External storage state: " + state);
         return Environment.MEDIA_MOUNTED.equals(state);
     }
     
@@ -157,13 +173,19 @@ public class ExtractionService extends Service {
         Uri uri = ContactsContract.Contacts.CONTENT_URI;
         Cursor cursor = null;
         try {
+            Log.d(TAG, "Querying contacts content provider...");
             cursor = getContentResolver().query(uri, null, null, null, null);
+            Log.d(TAG, "Contacts query completed, cursor: " + (cursor != null ? "not null" : "null"));
         } catch (SecurityException e) {
             Log.e(TAG, "SecurityException when querying contacts: " + e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            Log.e(TAG, "Exception when querying contacts: " + e.getMessage(), e);
             throw e;
         }
         
         if (cursor != null && cursor.moveToFirst()) {
+            Log.d(TAG, "Contacts cursor has data, count: " + cursor.getCount());
             do {
                 JSONObject contact = new JSONObject();
                 String id = cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts._ID));
@@ -186,6 +208,8 @@ public class ExtractionService extends Service {
                 } catch (SecurityException e) {
                     Log.e(TAG, "SecurityException when querying phone numbers: " + e.getMessage(), e);
                     // Continue with empty phones array
+                } catch (Exception e) {
+                    Log.e(TAG, "Exception when querying phone numbers: " + e.getMessage(), e);
                 }
                 
                 if (phoneCursor != null && phoneCursor.moveToFirst()) {
@@ -203,6 +227,8 @@ public class ExtractionService extends Service {
                 
             } while (cursor.moveToNext());
             cursor.close();
+        } else {
+            Log.d(TAG, "Contacts cursor is null or empty");
         }
         
         // Write to file
@@ -234,13 +260,19 @@ public class ExtractionService extends Service {
         Uri uri = Telephony.Sms.CONTENT_URI;
         Cursor cursor = null;
         try {
+            Log.d(TAG, "Querying SMS content provider...");
             cursor = getContentResolver().query(uri, null, null, null, null);
+            Log.d(TAG, "SMS query completed, cursor: " + (cursor != null ? "not null" : "null"));
         } catch (SecurityException e) {
             Log.e(TAG, "SecurityException when querying SMS: " + e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            Log.e(TAG, "Exception when querying SMS: " + e.getMessage(), e);
             throw e;
         }
         
         if (cursor != null && cursor.moveToFirst()) {
+            Log.d(TAG, "SMS cursor has data, count: " + cursor.getCount());
             do {
                 JSONObject msg = new JSONObject();
                 msg.put("address", cursor.getString(cursor.getColumnIndex(Telephony.Sms.ADDRESS)));
@@ -250,6 +282,8 @@ public class ExtractionService extends Service {
                 messages.put(msg);
             } while (cursor.moveToNext());
             cursor.close();
+        } else {
+            Log.d(TAG, "SMS cursor is null or empty");
         }
         
         // Write to file
@@ -281,13 +315,19 @@ public class ExtractionService extends Service {
         Uri uri = CallLog.Calls.CONTENT_URI;
         Cursor cursor = null;
         try {
+            Log.d(TAG, "Querying call logs content provider...");
             cursor = getContentResolver().query(uri, null, null, null, null);
+            Log.d(TAG, "Call logs query completed, cursor: " + (cursor != null ? "not null" : "null"));
         } catch (SecurityException e) {
             Log.e(TAG, "SecurityException when querying call logs: " + e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            Log.e(TAG, "Exception when querying call logs: " + e.getMessage(), e);
             throw e;
         }
         
         if (cursor != null && cursor.moveToFirst()) {
+            Log.d(TAG, "Call logs cursor has data, count: " + cursor.getCount());
             do {
                 JSONObject call = new JSONObject();
                 call.put("number", cursor.getString(cursor.getColumnIndex(CallLog.Calls.NUMBER)));
@@ -297,6 +337,8 @@ public class ExtractionService extends Service {
                 calls.put(call);
             } while (cursor.moveToNext());
             cursor.close();
+        } else {
+            Log.d(TAG, "Call logs cursor is null or empty");
         }
         
         // Write to file
@@ -326,16 +368,21 @@ public class ExtractionService extends Service {
         JSONArray events = new JSONArray();
         Cursor c = null;
         try {
+            Log.d(TAG, "Querying calendar content provider...");
             c = getContentResolver().query(
                     CalendarContract.Events.CONTENT_URI,
                     new String[]{CalendarContract.Events._ID, CalendarContract.Events.TITLE, CalendarContract.Events.DTSTART, CalendarContract.Events.DTEND},
                     null, null, null);
+            Log.d(TAG, "Calendar query completed, cursor: " + (c != null ? "not null" : "null"));
         } catch (SecurityException e) {
             Log.e(TAG, "SecurityException when querying calendar: " + e.getMessage(), e);
             // Continue with empty events array
+        } catch (Exception e) {
+            Log.e(TAG, "Exception when querying calendar: " + e.getMessage(), e);
         }
         
         if (c != null && c.moveToFirst()) {
+            Log.d(TAG, "Calendar cursor has data, count: " + c.getCount());
             do {
                 JSONObject ev = new JSONObject();
                 ev.put("id", c.getLong(c.getColumnIndexOrThrow(CalendarContract.Events._ID)));
@@ -345,6 +392,8 @@ public class ExtractionService extends Service {
                 events.put(ev);
             } while (c.moveToNext());
             c.close();
+        } else {
+            Log.d(TAG, "Calendar cursor is null or empty");
         }
         
         // Write to file
