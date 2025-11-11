@@ -1,0 +1,491 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      # --- USE GITHUB'S PRE-INSTALLED SDK ---
+      - name: Setup Android SDK
+        run: |
+          SDK_DIR="/usr/local/lib/android/sdk"
+          echo "Using pre-installed Android SDK at $SDK_DIR"
+          echo "ANDROID_HOME=$SDK_DIR" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> $GITHUB_ENV
+          echo "PATH=$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$PATH" >> $GITHUB_ENV
+
+      # --- ACCEPT LICENSES ---
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+
+      # --- INSTALL PLATFORM 33 + BUILD-TOOLS 33.0.2 ---
+      - name: Install Android Platform & Tools
+        run: |
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "platform-tools"
+
+      # --- PROJECT + FIXED DEPENDENCIES + IMPORTS ---
+      - name: Setup Project
+        run: |
+          # gradle.properties
+          cat > gradle.properties << 'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+          EOF
+
+          # app/build.gradle — FIXED KOTLIN + NO CORE
+          mkdir -p app
+          cat > app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.forensic.agent'
+              compileSdk 33
+
+              defaultConfig {
+                  applicationId "com.forensic.agent"
+                  minSdk 21
+                  targetSdk 33
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.9.0'
+              implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.8.10'
+          }
+
+          configurations.all {
+              resolutionStrategy {
+                  force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.10'
+                  force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.10'
+                  force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.10'
+              }
+          }
+          EOF
+
+          # AndroidManifest.xml
+          mkdir -p app/src/main
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.READ_CONTACTS" />
+              <uses-permission android:name="android.permission.READ_SMS" />
+              <uses-permission android:name="android.permission.READ_CALL_LOG" />
+              <uses-permission android:name="android.permission.READ_CALENDAR" />
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+
+              <application
+                  android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:label="Forensic Agent"
+                  android:theme="@style/Theme.MaterialComponents.DayNight">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+                  <service android:name=".ExtractionService" />
+              </application>
+
+          </manifest>
+          EOF
+
+          # MainActivity.java (unchanged)
+          mkdir -p app/src/main/java/com/forensic/agent
+          cat > app/src/main/java/com/forensic/agent/MainActivity.java << 'EOF'
+          package com.forensic.agent;
+
+          import android.Manifest;
+          import android.content.Intent;
+          import android.content.pm.PackageManager;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.os.Environment;
+          import android.widget.Button;
+          import android.widget.TextView;
+          import android.widget.Toast;
+          import androidx.appcompat.app.AppCompatActivity;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.content.ContextCompat;
+
+          public class MainActivity extends AppCompatActivity {
+
+              private static final int PERMISSION_REQUEST_CODE = 100;
+              private Button extractButton;
+              private TextView statusText;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setContentView(R.layout.activity_main);
+
+                  extractButton = findViewById(R.id.extractButton);
+                  statusText = findViewById(R.id.statusText);
+
+                  extractButton.setOnClickListener(v -> {
+                      if (!checkPermissions()) {
+                          requestPermissions();
+                          return;
+                      }
+
+                      Toast.makeText(this, "Starting data extraction...", Toast.LENGTH_SHORT).show();
+
+                      Intent serviceIntent = new Intent(this, ExtractionService.class);
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                          startForegroundService(serviceIntent);
+                      } else {
+                          startService(serviceIntent);
+                      }
+
+                      statusText.setText("Extraction in progress...\n\nData saving to:\n/sdcard/ForensicAgent/\n\nPlease wait 30-60 seconds...");
+                      extractButton.setEnabled(false);
+                  });
+              }
+
+              private boolean checkPermissions() {
+                  String[] permissions = {
+                      Manifest.permission.READ_CONTACTS,
+                      Manifest.permission.READ_SMS,
+                      Manifest.permission.READ_CALL_LOG,
+                      Manifest.permission.READ_CALENDAR,
+                      Manifest.permission.WRITE_EXTERNAL_STORAGE
+                  };
+                  for (String perm : permissions) {
+                      if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                          return false;
+                      }
+                  }
+                  return true;
+              }
+
+              private void requestPermissions() {
+                  ActivityCompat.requestPermissions(this,
+                      new String[]{
+                          Manifest.permission.READ_CONTACTS,
+                          Manifest.permission.READ_SMS,
+                          Manifest.permission.READ_CALL_LOG,
+                          Manifest.permission.READ_CALENDAR,
+                          Manifest.permission.WRITE_EXTERNAL_STORAGE
+                      }, PERMISSION_REQUEST_CODE);
+              }
+
+              @Override
+              public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+                  super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+                  if (requestCode == PERMISSION_REQUEST_CODE) {
+                      boolean allGranted = true;
+                      for (int result : grantResults) {
+                          if (result != PackageManager.PERMISSION_GRANTED) {
+                              allGranted = false;
+                              break;
+                          }
+                      }
+                      if (allGranted) {
+                          extractButton.performClick();
+                      } else {
+                          Toast.makeText(this, "Permissions denied. Cannot extract data.", Toast.LENGTH_LONG).show();
+                      }
+                  }
+              }
+          }
+          EOF
+
+          # ExtractionService.java — FIXED IMPORTS
+          cat > app/src/main/java/com/forensic/agent/ExtractionService.java << 'EOF'
+          package com.forensic.agent;
+
+          import android.app.Notification;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.app.Service;
+          import android.content.Intent;
+          import android.database.Cursor;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Environment;
+          import android.os.IBinder;
+          import android.provider.CallLog;
+          import android.provider.ContactsContract;
+          import android.provider.Telephony;
+          import android.provider.CalendarContract;
+          import androidx.core.app.NotificationCompat;
+          import org.json.JSONArray;
+          import org.json.JSONObject;
+          import java.io.File;
+          import java.io.FileWriter;
+
+          public class ExtractionService extends Service {
+
+              private static final String CHANNEL_ID = "forensic_agent_channel";
+
+              @Override
+              public void onCreate() {
+                  super.onCreate();
+                  startForegroundWithNotification();
+              }
+
+              private void startForegroundWithNotification() {
+                  NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Forensic Agent", NotificationManager.IMPORTANCE_LOW);
+                      nm.createNotificationChannel(channel);
+                  }
+
+                  PendingIntent pi = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
+                      PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+                  Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                      .setContentTitle("Forensic Agent")
+                      .setContentText("Extracting data...")
+                      .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                      .setContentIntent(pi)
+                      .setOngoing(true)
+                      .build();
+
+                  startForeground(1, notification);
+              }
+
+              @Override
+              public int onStartCommand(Intent intent, int flags, int startId) {
+                  new Thread(() -> {
+                      try {
+                          File outputDir = new File(Environment.getExternalStorageDirectory(), "ForensicAgent");
+                          outputDir.mkdirs();
+
+                          extractContacts(new File(outputDir, "contacts.json"));
+                          extractSMS(new File(outputDir, "sms.json"));
+                          extractCallLogs(new File(outputDir, "call_logs.json"));
+                          extractCalendar(new File(outputDir, "calendar.json"));
+
+                          stopForeground(true);
+                          stopSelf();
+                      } catch (Exception e) {
+                          e.printStackTrace();
+                      }
+                  }).start();
+
+                  return START_NOT_STICKY;
+              }
+
+              private void extractContacts(File file) throws Exception {
+                  JSONArray contacts = new JSONArray();
+                  Uri uri = ContactsContract.Contacts.CONTENT_URI;
+                  Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+                  if (cursor != null && cursor.moveToFirst()) {
+                      do {
+                          JSONObject contact = new JSONObject();
+                          String id = cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts._ID));
+                          String name = cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME));
+                          contact.put("id", id);
+                          contact.put("name", name);
+
+                          JSONArray phones = new JSONArray();
+                          Cursor phoneCursor = getContentResolver().query(
+                              ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                              null,
+                              ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?",
+                              new String[]{id}, null);
+                          if (phoneCursor != null && phoneCursor.moveToFirst()) {
+                              do {
+                                  String number = phoneCursor.getString(phoneCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER));
+                                  phones.put(number);
+                              } while (phoneCursor.moveToNext());
+                              phoneCursor.close();
+                          }
+                          contact.put("phones", phones);
+                          contacts.put(contact);
+                      } while (cursor.moveToNext());
+                      cursor.close();
+                  }
+                  FileWriter writer = new FileWriter(file);
+                  writer.write(contacts.toString(2));
+                  writer.close();
+              }
+
+              private void extractSMS(File file) throws Exception {
+                  JSONArray messages = new JSONArray();
+                  Uri uri = Telephony.Sms.CONTENT_URI;
+                  Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+                  if (cursor != null && cursor.moveToFirst()) {
+                      do {
+                          JSONObject msg = new JSONObject();
+                          msg.put("address", cursor.getString(cursor.getColumnIndex(Telephony.Sms.ADDRESS)));
+                          msg.put("body", cursor.getString(cursor.getColumnIndex(Telephony.Sms.BODY)));
+                          msg.put("date", cursor.getLong(cursor.getColumnIndex(Telephony.Sms.DATE)));
+                          msg.put("type", cursor.getInt(cursor.getColumnIndex(Telephony.Sms.TYPE)));
+                          messages.put(msg);
+                      } while (cursor.moveToNext());
+                      cursor.close();
+                  }
+                  FileWriter writer = new FileWriter(file);
+                  writer.write(messages.toString(2));
+                  writer.close();
+              }
+
+              private void extractCallLogs(File file) throws Exception {
+                  JSONArray calls = new JSONArray();
+                  Uri uri = CallLog.Calls.CONTENT_URI;
+                  Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+                  if (cursor != null && cursor.moveToFirst()) {
+                      do {
+                          JSONObject call = new JSONObject();
+                          call.put("number", cursor.getString(cursor.getColumnIndex(CallLog.Calls.NUMBER)));
+                          call.put("date", cursor.getLong(cursor.getColumnIndex(CallLog.Calls.DATE)));
+                          call.put("duration", cursor.getInt(cursor.getColumnIndex(CallLog.Calls.DURATION)));
+                          call.put("type", cursor.getInt(cursor.getColumnIndex(CallLog.Calls.TYPE)));
+                          calls.put(call);
+                      } while (cursor.moveToNext());
+                      cursor.close();
+                  }
+                  FileWriter writer = new FileWriter(file);
+                  writer.write(calls.toString(2));
+                  writer.close();
+              }
+
+              private void extractCalendar(File file) throws Exception {
+                  JSONArray events = new JSONArray();
+                  Cursor c = getContentResolver().query(
+                      CalendarContract.Events.CONTENT_URI,
+                      new String[]{
+                          CalendarContract.Events._ID,
+                          CalendarContract.Events.TITLE,
+                          CalendarContract.Events.DTSTART,
+                          CalendarContract.Events.DTEND
+                      }, null, null, null);
+                  if (c != null && c.moveToFirst()) {
+                      do {
+                          JSONObject ev = new JSONObject();
+                          ev.put("id", c.getLong(c.getColumnIndexOrThrow(CalendarContract.Events._ID)));
+                          ev.put("title", c.getString(c.getColumnIndexOrThrow(CalendarContract.Events.TITLE)));
+                          ev.put("dtstart", c.getLong(c.getColumnIndexOrThrow(CalendarContract.Events.DTSTART)));
+                          ev.put("dtend", c.getLong(c.getColumnIndexOrThrow(CalendarContract.Events.DTEND)));
+                          events.put(ev);
+                      } while (c.moveToNext());
+                      c.close();
+                  }
+                  FileWriter writer = new FileWriter(file);
+                  writer.write(events.toString(2));
+                  writer.close();
+              }
+
+              @Override
+              public IBinder onBind(Intent intent) {
+                  return null;
+              }
+          }
+          EOF
+
+          # layout/activity_main.xml
+          mkdir -p app/src/main/res/layout
+          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:padding="24dp"
+              android:gravity="center">
+
+              <TextView
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="Forensic Agent"
+                  android:textSize="28sp"
+                  android:textStyle="bold"
+                  android:layout_marginBottom="32dp"/>
+
+              <Button
+                  android:id="@+id/extractButton"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Extract Data"
+                  android:textSize="18sp"/>
+
+              <TextView
+                  android:id="@+id/statusText"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Tap button to start"
+                  android:textAlignment="center"
+                  android:layout_marginTop="24dp"/>
+          </LinearLayout>
+          EOF
+
+      # --- ICONS ---
+      - name: Add Icons
+        run: |
+          mkdir -p app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
+          curl -L -o app/src/main/res/mipmap-mdpi/ic_launcher.png \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-mdpi/ic_launcher.png
+          curl -L -o app/src/main/res/mipmap-hdpi/ic_launcher.png \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-hdpi/ic_launcher.png
+          curl -L -o app/src/main/res/mipmap-xhdpi/ic_launcher.png \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xhdpi/ic_launcher.png
+          curl -L -o app/src/main/res/mipmap-xxhdpi/ic_launcher.png \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xxhdpi/ic_launcher.png
+          curl -L -o app/src/main/res/mipmap-xxxhdpi/ic_launcher.png \
+            https://raw.githubusercontent.com/android/platform_frameworks_base/master/core/res/res/mipmap-xxxhdpi/ic_launcher.png
+
+      # --- GRADLE WRAPPER ---
+      - name: Bootstrap Gradle
+        run: |
+          mkdir -p gradle/wrapper
+          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-7.5-all.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+          curl -L https://github.com/gradle/gradle/raw/v7.5.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+          curl -L https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew -o gradlew
+          curl -L https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew.bat -o gradlew.bat
+          chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ForensicAgent-Debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
