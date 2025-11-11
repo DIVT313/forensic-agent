@@ -5,36 +5,23 @@
 
     <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="34" />
 
-    <!-- Basic permissions -->
+    <!-- Essential permissions for forensic extraction -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     
-    <!-- Android 13+ media permissions -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-    
-    <!-- Android 14+ media permissions -->
-    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
-    
-    <!-- Android 13+ notification permission -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    
-    <!-- Other permissions -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Required for foreground service (Android 8+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    
+    <!-- Required for foreground service type (Android 14+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Forensic Agent"
-        android:theme="@style/AppTheme"
-        android:requestLegacyExternalStorage="true">
+        android:theme="@style/AppTheme">
         
         <activity
             android:name=".MainActivity"
